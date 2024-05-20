@@ -271,6 +271,7 @@ class SearchBarButton(LayoutButton):  # {{{
         self.action_toggle.triggered.connect(self.toggle)
         self.action_toggle.changed.connect(self.update_shortcut)
         self.toggled.connect(self.update_state)
+        self.update_shortcut()
 
     @property
     def is_visible(self):
@@ -496,7 +497,7 @@ class LayoutMixin:  # {{{
                         QToolButton:checked { background: rgba(0, 0, 0, 25%); }
                 ''')
         for button in reversed(self.layout_buttons):
-            self.status_bar.insertPermanentWidget(1, button)
+            self.status_bar.insertPermanentWidget(2, button)
         self.layout_button.setMenu(LayoutMenu(self))
         self.layout_button.setVisible(not gprefs['show_layout_buttons'])
 
