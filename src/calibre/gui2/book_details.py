@@ -192,7 +192,6 @@ def add_notes_context_menu_actions(menu, book_info, field, value):
                         _('Are you sure you want to delete the note for {} from this library? '
                           'There is no undo.').format(val),
                         skip_dialog_name='book_details_delete_note_context_menu'):
-                    print('here to delete')
                     db = gui.current_db.new_api
                     db.set_notes_for(field, item_id, '')
                     gui.do_field_item_value_changed()
@@ -288,6 +287,17 @@ def render_html(mi, vertical, widget, all_fields=False, render_data_func=None,
                 ans = str(col.name())
         return ans
 
+    comments = ''
+    if comment_fields:
+        comments = '\n'.join('<div>%s</div>' % x for x in comment_fields)
+        # Comments cause issues with rendering in QTextBrowser
+        comments = comments_pat().sub('', comments)
+
+    html = render_parts(table, comments, vertical)
+    return html, table, comments
+
+
+def render_parts(table, comments, vertical):
     templ = '''\
     <html>
         <head></head>
@@ -296,11 +306,6 @@ def render_html(mi, vertical, widget, all_fields=False, render_data_func=None,
         </body>
     <html>
     '''%('vertical' if vertical else 'horizontal')
-    comments = ''
-    if comment_fields:
-        comments = '\n'.join('<div>%s</div>' % x for x in comment_fields)
-        # Comments cause issues with rendering in QTextBrowser
-        comments = comments_pat().sub('', comments)
     right_pane = comments
 
     if vertical:
@@ -713,7 +718,7 @@ class CoverView(QWidget):  # {{{
     def __init__(self, vertical, parent=None):
         QWidget.__init__(self, parent)
         self._current_pixmap_size = QSize(120, 120)
-        self.vertical = vertical
+        self.change_layout(vertical)
 
         self.animation = QPropertyAnimation(self, b'current_pixmap_size', self)
         self.animation.setEasingCurve(QEasingCurve(QEasingCurve.Type.OutExpo))
@@ -721,9 +726,6 @@ class CoverView(QWidget):  # {{{
         self.animation.setStartValue(QSize(0, 0))
         self.animation.valueChanged.connect(self.value_changed)
 
-        self.setSizePolicy(
-                QSizePolicy.Policy.Expanding if vertical else QSizePolicy.Policy.Minimum,
-                QSizePolicy.Policy.Expanding)
 
         self.default_pixmap = QApplication.instance().cached_qpixmap('default_cover.png', device_pixel_ratio=self.devicePixelRatio())
         self.pixmap = self.default_pixmap
@@ -732,6 +734,12 @@ class CoverView(QWidget):  # {{{
         self.last_trim_id = self.last_trim_pixmap = None
 
         self.do_layout()
+
+    def change_layout(self, vertical):
+        self.vertical = vertical
+        self.setSizePolicy(
+                QSizePolicy.Policy.Expanding if vertical else QSizePolicy.Policy.Minimum,
+                QSizePolicy.Policy.Expanding)
 
     def value_changed(self, val):
         self.update()
@@ -989,6 +997,7 @@ class BookInfo(HTMLDisplay):
     def __init__(self, vertical, parent=None):
         HTMLDisplay.__init__(self, parent=parent, save_resources_in_document=False)
         self.vertical = vertical
+        self.last_rendered_html = '', '', ''
         self.anchor_clicked.connect(self.link_activated)
         for x, icon in [
             ('remove_format', 'trash.png'), ('save_format', 'save.png'),
@@ -1015,6 +1024,14 @@ class BookInfo(HTMLDisplay):
         ac.current_url = ac.current_fmt = None
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setDefaultStyleSheet(css())
+
+    def change_layout(self, vertical):
+        if vertical != self.vertical:
+            self.vertical = vertical
+            if self.last_rendered_html[0]:
+                html = render_parts(self.last_rendered_html[1], self.last_rendered_html[2], self.vertical)
+                self.last_rendered_html = html, self.last_rendered_html[1], self.last_rendered_html[2]
+                self.setHtml(html)
 
     def refresh_css(self):
         self.setDefaultStyleSheet(css(True))
@@ -1070,7 +1087,7 @@ class BookInfo(HTMLDisplay):
         self.link_clicked.emit(link)
 
     def show_data(self, mi):
-        html = render_html(mi, self.vertical, self.parent())
+        html, table, comments = self.last_rendered_html = render_html(mi, self.vertical, self.parent())
         set_html(mi, html, self)
 
     def process_external_css(self, css):
@@ -1115,7 +1132,6 @@ class DetailsLayout(QSplitter):  # {{{
         super().__init__(orientation, parent)
         self.vertical = vertical
         self._children = []
-        self.min_size = QSize(190, 200) if vertical else QSize(120, 120)
         self.setContentsMargins(0, 0, 0, 0)
         self.splitterMoved.connect(self.do_splitter_moved,
                                    type=Qt.ConnectionType.QueuedConnection)
@@ -1123,6 +1139,10 @@ class DetailsLayout(QSplitter):  # {{{
         self.resize_timer.setSingleShot(True)
         self.resize_timer.setInterval(5)
         self.resize_timer.timeout.connect(self.do_resize)
+
+    def change_layout(self, vertical):
+        self.vertical = vertical
+        self.restore_splitter_state()
 
     def do_resize(self, *args):
         super().resizeEvent(self._resize_ev)
@@ -1135,7 +1155,7 @@ class DetailsLayout(QSplitter):  # {{{
         self.resize_timer.start()
 
     def minimumSize(self):
-        return QSize(self.min_size)
+        return QSize(190, 200) if self.vertical else QSize(120, 120)
 
     def addWidget(self, child):
         if len(self._children) > 2:
@@ -1146,10 +1166,16 @@ class DetailsLayout(QSplitter):  # {{{
         return len(self._children)
 
     def sizeHint(self):
-        return QSize(self.min_size)
+        return self.minimumSize()
+
+    @property
+    def splitter_state_pref_name(self):
+        return 'book_details_widget_splitter_state_' + ('vertical' if self.vertical else 'horizontal')
 
     def restore_splitter_state(self):
-        s = gprefs.get('book_details_widget_splitter_state')
+        s = gprefs.get(self.splitter_state_pref_name)
+        if s is None:
+            s = gprefs.get('book_details_widget_splitter_state')
         if s is None:
             # Without this on first start the splitter is rendered over the cover
             self.setSizes([20, 80])
@@ -1157,12 +1183,12 @@ class DetailsLayout(QSplitter):  # {{{
             self.restoreState(s)
         self.setOrientation(Qt.Orientation.Vertical if self.vertical else Qt.Orientation.Horizontal)
 
-    def setGeometry(self, r):
-        super().setGeometry(r)
-        self.do_layout(r)
+    def setGeometry(self, *a):
+        super().setGeometry(*a)
+        self.do_layout(self.geometry())
 
     def do_splitter_moved(self, *args):
-        gprefs['book_details_widget_splitter_state'] = bytearray(self.saveState())
+        gprefs[self.splitter_state_pref_name] = bytearray(self.saveState())
         self._children[0].do_layout()
 
     def cover_height(self, r):
@@ -1289,7 +1315,7 @@ class BookDetails(DetailsLayout):  # {{{
     # }}}
 
     def __init__(self, vertical, parent=None):
-        DetailsLayout.__init__(self, vertical, parent)
+        super().__init__(vertical, parent)
         self.last_data = {}
         self.setAcceptDrops(True)
         self._layout = self
@@ -1320,6 +1346,13 @@ class BookDetails(DetailsLayout):  # {{{
         self.book_info.find_in_tag_browser.connect(self.find_in_tag_browser)
         self.book_info.edit_identifiers.connect(self.edit_identifiers)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def change_layout(self, vertical):
+        if vertical != self.vertical:
+            super().change_layout(vertical)
+            self.cover_view.change_layout(vertical)
+            self.book_info.change_layout(vertical)
+            self.do_layout(self.rect())
 
     def search_internet(self, data):
         if self.last_data:

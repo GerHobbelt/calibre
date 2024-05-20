@@ -3,7 +3,7 @@
 
 from enum import Enum
 from functools import partial
-from qt.core import QIcon, QToolButton
+from qt.core import QToolButton
 
 from calibre.gui2.actions import InterfaceAction
 
@@ -28,12 +28,20 @@ class LayoutActions(InterfaceAction):
     action_add_menu = True
     dont_add_to = frozenset({'context-menu-device', 'menubar-device'})
 
+    def toggle_layout(self):
+        self.gui.layout_container.toggle_layout()
+
     def gui_layout_complete(self):
         m = self.qaction.menu()
+        m.aboutToShow.connect(self.populate_layout_menu)
+
+    def populate_layout_menu(self):
+        m = self.qaction.menu()
+        m.clear()
         m.addAction(_('Hide all'), self.hide_all)
         for button, name in zip(self.gui.layout_buttons, self.gui.button_order):
             m.addSeparator()
-            ic = QIcon.ic(button.icname)
+            ic = button.icon()
             m.addAction(ic, _('Show {}').format(button.label), partial(self.set_visible, Panel(name), True))
             m.addAction(ic, _('Hide {}').format(button.label), partial(self.set_visible, Panel(name), False))
 
