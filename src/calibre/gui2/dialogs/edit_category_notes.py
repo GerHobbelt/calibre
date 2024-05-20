@@ -2,15 +2,16 @@
 # License: GPLv3 Copyright: 2023, Kovid Goyal <kovid at kovidgoyal.net>
 
 import os
+import sys
 from qt.core import (
     QButtonGroup, QByteArray, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QIcon, QLabel, QLineEdit, QPixmap, QPushButton, QRadioButton, QSize, Qt,
+    QIcon, QLabel, QLineEdit, QPixmap, QPushButton, QRadioButton, QSize, QSpinBox, Qt,
     QTextDocument, QTextFrameFormat, QTextImageFormat, QUrl, QVBoxLayout, QWidget,
     pyqtSlot,
 )
 from typing import NamedTuple
 
-from calibre import sanitize_file_name
+from calibre import sanitize_file_name, fit_image
 from calibre.db.constants import RESOURCE_URL_SCHEME
 from calibre.db.notes.connect import hash_data
 from calibre.db.notes.exim import export_note, import_note
@@ -83,6 +84,7 @@ class AskImage(Dialog):
         self.v = v = QVBoxLayout(self)
         self.h = h = QHBoxLayout()
         v.addLayout(h)
+
         v.addWidget(self.bb)
 
         self.image_preview = ip = ImageView(self, 'insert-image-for-notes-preview', True)
@@ -100,6 +102,15 @@ class AskImage(Dialog):
         ne.setPlaceholderText(_('Filename for the image'))
         vr.addWidget(ne)
 
+        self.hb = hb = QHBoxLayout()
+        vr.addLayout(hb)
+        self.add_file_button = b = QPushButton(QIcon.ic('document_open.png'), _('Choose image &file'), self)
+        b.clicked.connect(self.add_file)
+        hb.addWidget(b)
+        self.paste_button = b = QPushButton(QIcon.ic('edit-paste.png'), _('&Paste from clipboard'), self)
+        b.clicked.connect(self.paste_image)
+        hb.addWidget(b)
+
         self.la2 = la = QLabel(_('Place image:'))
         vr.addWidget(la)
         self.hr = hr = QHBoxLayout()
@@ -113,14 +124,23 @@ class AskImage(Dialog):
         bg.addButton(r), hr.addWidget(r)
         self.inline.setChecked(True)
 
-        self.hb = hb = QHBoxLayout()
-        vr.addLayout(hb)
-        self.add_file_button = b = QPushButton(QIcon.ic('document_open.png'), _('Choose image &file'), self)
-        b.clicked.connect(self.add_file)
-        hb.addWidget(b)
-        self.paste_button = b = QPushButton(QIcon.ic('edit-paste.png'), _('&Paste from clipboard'), self)
-        b.clicked.connect(self.paste_image)
-        hb.addWidget(b)
+        self.la2 = la = QLabel(_('Shrink image to fit within:'))
+        vr.addWidget(la)
+        self.hr2 = h = QHBoxLayout()
+        vr.addLayout(h)
+        la = QLabel(_('&Width:'))
+        h.addWidget(la)
+        self.width = w = QSpinBox(self)
+        w.setRange(0, 10000), w.setSuffix(' px')
+        h.addWidget(w), la.setBuddy(w)
+        w.setSpecialValueText(' ')
+        la = QLabel(_('&Height:'))
+        h.addWidget(la)
+        self.height = w = QSpinBox(self)
+        w.setRange(0, 10000), w.setSuffix(' px')
+        h.addWidget(w), la.setBuddy(w)
+        w.setSpecialValueText(' ')
+        h.addStretch(10)
 
         vr.addStretch(10)
         self.add_file_button.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -154,7 +174,7 @@ class AskImage(Dialog):
     def paste_image(self):
         if not self.image_preview.paste_from_clipboard():
             return error_dialog(self, _('Could not paste'), _(
-                'No image is present int he system clipboard'), show=True)
+                'No image is present in the system clipboard'), show=True)
 
     @property
     def image_layout(self) -> 'QTextFrameFormat.Position':
@@ -164,6 +184,15 @@ class AskImage(Dialog):
         if b is self.float_left:
             return QTextFrameFormat.Position.FloatLeft
         return QTextFrameFormat.Position.FloatRight
+
+    @property
+    def image_size(self) -> tuple[int, int]:
+        s = self.image_preview.pixmap().size()
+        return s.width(), s.height()
+
+    @property
+    def bounding_size(self) -> tuple[int, int]:
+        return (self.width.value() or sys.maxsize), (self.height.value() or sys.maxsize)
 # }}}
 
 
@@ -228,6 +257,8 @@ class NoteEditorWidget(EditorWidget):
         return '', '', False
 
     def do_insert_image(self):
+        # See https://bugreports.qt.io/browse/QTBUG-118537
+        # for why we cant have a nice margin for floating images
         d = AskImage(self.images, self.db)
         if d.exec() == QDialog.DialogCode.Accepted and d.current_digest:
             ir = self.images[d.current_digest]
@@ -236,6 +267,12 @@ class NoteEditorWidget(EditorWidget):
             fmt = QTextImageFormat()
             alg, digest = ir.digest.split(':', 1)
             fmt.setName(RESOURCE_URL_SCHEME + f'://{alg}/{digest}?placement={uuid4()}')
+            page_width, page_height = d.bounding_size
+            w, h = d.image_size
+            resized, nw, nh = fit_image(w, h, page_width, page_height)
+            if resized:
+                fmt.setWidth(nw)
+                fmt.setHeight(nh)
             c.insertImage(fmt, d.image_layout)
 
 
@@ -246,7 +283,10 @@ class NoteEditor(Editor):
     def get_doc(self):
         self.editor.referenced_resources = set()
         self.editor.searchable_text = ''
+        idx = self.tabs.currentIndex()
+        self.tabs.setCurrentIndex(0)
         html = self.editor.html
+        self.tabs.setCurrentIndex(idx)
         return html, self.editor.searchable_text, self.editor.referenced_resources, self.editor.images.values()
 
     def export_note(self):

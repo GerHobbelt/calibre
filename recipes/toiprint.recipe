@@ -70,7 +70,6 @@ class toiprint(BasicNewsRecipe):
             if sec_name == 'Advertisement':
                 continue
             self.log(sec_name)
-            articles = []
             if 'Articles' in link:
                 for art in link['Articles']:
                     section = sec_name
@@ -84,7 +83,15 @@ class toiprint(BasicNewsRecipe):
                         desc = 'Page No.' + url.split('_')[-3] + ' | ' + art.get('ColumnTitle', '')
                     self.log('\t', title, '\n\t', desc.replace('\n', ''))
                     feeds_dict[section].append({"title": title, "url": url, "description": desc})
-        return [(section, articles) for section, articles in feeds_dict.items()]
+        def sort_key(x):
+            section = x[0]
+            try:
+                return (
+                    'Front Page', 'Times Nation', 'Times Region', 'Times City'
+                ).index(section)
+            except Exception:
+                return 99999999
+        return (sorted(feeds_dict.items(), key=sort_key))
 
     def preprocess_raw_html(self, raw, *a):
         data = json.loads(raw)

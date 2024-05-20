@@ -686,7 +686,8 @@ class Cache:
         ' Return all notes data as a dict or None if note does not exist '
         return self.backend.notes_data_for(field, item_id)
 
-    def get_all_items_that_have_notes(self, field_name=None) -> set[int] | dict[str, int]:
+    @read_api
+    def get_all_items_that_have_notes(self, field_name=None) -> set[int] | dict[str, set[int]]:
         ' Return all item_ids for items that have notes in the specified field or all fields if field_name is None '
         return self.backend.get_all_items_that_have_notes(field_name)
 
@@ -749,13 +750,19 @@ class Cache:
         return self.backend.export_note(field, item_id)
 
     @write_api
-    def import_note(self, field, item_id, path_to_html_file):
+    def import_note(self, field, item_id, path_to_html_file, path_is_data=False):
         ' Import a previously exported note or an arbitrary HTML file as the note for the specified item '
-        with open(path_to_html_file, 'rb') as f:
-            html = f.read()
-            st = os.stat(f.fileno())
-        basedir = os.path.dirname(os.path.abspath(path_to_html_file))
-        return self.backend.import_note(field, item_id, html, basedir, st.st_ctime, st.st_mtime)
+        if path_is_data:
+            html = path_to_html_file
+            ctime = mtime = time()
+            basedir = base_dir()
+        else:
+            with open(path_to_html_file, 'rb') as f:
+                html = f.read()
+                st = os.stat(f.fileno())
+                ctime, mtime = st.st_ctime, st.st_mtime
+            basedir = os.path.dirname(os.path.abspath(path_to_html_file))
+        return self.backend.import_note(field, item_id, html, basedir, ctime, mtime)
 
     @write_api  # we need to use write locking as SQLITE gives a locked table error if multiple FTS queries are made at the same time
     def search_notes(
@@ -1396,6 +1403,12 @@ class Cache:
             ret = buf.getvalue()
 
         return ret
+
+    @read_api
+    def newly_added_book_ids(self, count=5) -> list[int]:
+        ids_to_sort = self._all_book_ids(list)
+        ids_to_sort.sort(reverse=True)
+        return ids_to_sort[:count]
 
     @read_api
     def multisort(self, fields, ids_to_sort=None, virtual_fields=None):

@@ -4,6 +4,7 @@
 
 import os
 import re
+import sys
 import weakref
 from collections import defaultdict
 from contextlib import contextmanager
@@ -14,17 +15,18 @@ from qt.core import (
     QAction, QApplication, QBrush, QByteArray, QCheckBox, QColor, QColorDialog, QDialog,
     QDialogButtonBox, QFont, QFontInfo, QFontMetrics, QFormLayout, QHBoxLayout, QIcon,
     QKeySequence, QLabel, QLineEdit, QMenu, QPalette, QPlainTextEdit, QPointF,
-    QPushButton, QSize, QSyntaxHighlighter, Qt, QTabWidget, QTextBlockFormat,
+    QPushButton, QSize, QSpinBox, QSyntaxHighlighter, Qt, QTabWidget, QTextBlockFormat,
     QTextCharFormat, QTextCursor, QTextDocument, QTextEdit, QTextFormat,
-    QTextFrameFormat, QTextListFormat, QTimer, QToolButton, QUrl, QVBoxLayout, QWidget,
-    pyqtSignal, pyqtSlot,
+    QTextFrameFormat, QTextImageFormat, QTextListFormat, QTimer, QToolButton, QUrl,
+    QVBoxLayout, QWidget, pyqtSignal, pyqtSlot,
 )
 
-from calibre import xml_replace_entities
+from calibre import fit_image, xml_replace_entities
 from calibre.db.constants import DATA_DIR_NAME
 from calibre.ebooks.chardet import xml_to_unicode
 from calibre.gui2 import (
     NO_URL_FORMATTING, choose_dir, choose_files, error_dialog, gprefs, is_dark_theme,
+    safe_open_url,
 )
 from calibre.gui2.book_details import resolved_css
 from calibre.gui2.flow_toolbar import create_flow_toolbar
@@ -914,6 +916,56 @@ class EditorWidget(QTextEdit, LineEditECM):  # {{{
         if fmt.isImageFormat():
             c.deletePreviousChar()
 
+    def resize_image_at(self, cursor_pos):
+        c = self.textCursor()
+        c.clearSelection()
+        c.setPosition(cursor_pos)
+        c.movePosition(QTextCursor.MoveOperation.PreviousCharacter, QTextCursor.MoveMode.KeepAnchor)
+        fmt = c.charFormat()
+        if not fmt.isImageFormat():
+            return
+        fmt = fmt.toImageFormat()
+        from calibre.utils.img import image_from_data
+        img = image_from_data(self.loadResource(QTextDocument.ResourceType.ImageResource, QUrl(fmt.name())))
+        w, h = int(fmt.width()), int(fmt.height())
+        d = QDialog(self)
+        l = QVBoxLayout(d)
+        la = QLabel(_('Shrink image to fit within:'))
+        h = QHBoxLayout()
+        l.addLayout(h)
+        la = QLabel(_('&Width:'))
+        h.addWidget(la)
+        d.width = w = QSpinBox(self)
+        w.setRange(0, 10000), w.setSuffix(' px')
+        w.setValue(int(fmt.width()))
+        h.addWidget(w), la.setBuddy(w)
+        w.setSpecialValueText(' ')
+        la = QLabel(_('&Height:'))
+        h.addWidget(la)
+        d.height = w = QSpinBox(self)
+        w.setRange(0, 10000), w.setSuffix(' px')
+        w.setValue(int(fmt.height()))
+        h.addWidget(w), la.setBuddy(w)
+        w.setSpecialValueText(' ')
+        h.addStretch(10)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bb.accepted.connect(d.accept), bb.rejected.connect(d.reject)
+        d.setWindowTitle(_('Enter new size for image'))
+        l.addWidget(bb)
+        d.resize(d.sizeHint())
+
+        if d.exec() == QDialog.DialogCode.Accepted:
+            page_width, page_height = (d.width.value() or sys.maxsize), (d.height.value() or sys.maxsize)
+            w, h = int(img.width()), int(img.height())
+            resized, nw, nh = fit_image(w, h, page_width, page_height)
+            if resized:
+                fmt.setWidth(nw), fmt.setHeight(nh)
+            else:
+                f = QTextImageFormat()
+                f.setName(fmt.name())
+                fmt = f
+            c.setCharFormat(fmt)
+
     def align_image_at(self, cursor_pos, alignment):
         c = self.textCursor()
         c.clearSelection()
@@ -971,11 +1023,17 @@ class EditorWidget(QTextEdit, LineEditECM):  # {{{
                     ac.triggered.connect(partial(self.align_image_at, c.position(), epos))
                     if pos == epos:
                         ac.setChecked(True)
+                cs = align_menu.addAction(QIcon.ic('resize.png'), _('Change size'))
+                cs.triggered.connect(partial(self.resize_image_at, c.position()))
+                align_menu.addSeparator()
                 a(_('Float to the left'), QTextFrameFormat.Position.FloatLeft)
                 a(_('Inline with text'), QTextFrameFormat.Position.InFlow)
                 a(_('Float to the right'), QTextFrameFormat.Position.FloatRight)
                 align_menu.addSeparator()
                 align_menu.addAction(QIcon.ic('trash.png'), _('Remove this image')).triggered.connect(partial(self.remove_image_at, c.position()))
+        link_name = self.document().documentLayout().anchorAt(QPointF(ev.pos()))
+        if link_name:
+            menu.addAction(QIcon.ic('insert-link.png'), _('Open link'), partial(safe_open_url, QUrl(link_name)))
         for ac in 'undo redo -- cut copy paste paste_and_match_style -- select_all'.split():
             if ac == '--':
                 menu.addSeparator()
