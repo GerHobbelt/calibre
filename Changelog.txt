@@ -23,6 +23,93 @@
 # - title by author
 # }}}
 
+{{{ 7.6.0 2024-03-01
+
+:: new features
+
+- [major 1979022] E-book viewer: Allow saving current settings in "profiles" that can be quickly and easily swapped between
+
+  To create a profile or switch to a previously saved profile access "Profiles" from the viewer controls or press the `Alt+P` shortcut.
+
+- [2053144] Edit book: Add a shortcut `Ctrl+M` to merge selected files
+
+- Get books: Add support for Amazon Mexico
+
+- A new toolbar button to show all available actions in sub menus. Can be added via `Preferences->Toolbars & menus`
+
+- Edit book: Allow selecting multiple books to edit at once, opening all selected books in separate editor instances
+
+:: bug fixes
+
+- [2054617] Cover grid: Fix dragging the mouse while holding shift to extend the selection not working well
+
+- [2054934] E-book viewer: Fix doing a multi-page selections sometimes causing the start of the selection to move backwards
+
+- Edit book: Live CSS: Fix regression causing incorrect colors in calibre 7
+
+- Windows: Fix a regression in calibre 7 that caused images in long text columns to not be displayed in the tooltip for the tooltip
+
+- Fix disabled items in menus having blurry text
+
+- Content server: Fix a regression in the previous release that caused an error when doing a search/sort on some browsers
+
+:: improved recipes
+- New Yorker
+- Moneycontrol
+- Swarajya Mag
+- nautil.us
+- Pro Physik
+
+:: new recipes
+- The Week UK by unkn0wn
+- Andhrajyothy by unkn0wn
+}}}
+
+{{{ 7.5.1 2024-02-09
+
+:: new features
+
+- Allow fine tuning the colors used in the calibre interface via Preference->Look & feel->Main interface->User interface colors
+
+  Note that calibre no longer follows system colors on Linux in light mode (the only place where it used to follow system colors). However,
+  there is a convenient button in the manage colors dialog to import the system colors.
+
+- [2052462] Full text search window: Add actions to the context menu to open the book at the clicked on result. Also allow using the view book shortcut to open the currently selected search result
+
+- [2052460] When showing the Full text search dialog, pre populate the search box with the contents of the main calibre search box if the main search box contains a simple search
+
+:: bug fixes
+
+- Windows: Fix a regression in 7.0 that caused images referring to files on the disk within comments columns to not display in some circumstances
+
+- E-book viewer: Fix clock showing hour as zero instead of 12 between 12 and 1 am/pm
+
+- [2050100] Edit book: When wrapping selected text in a tag, preserve the selection after wrapping
+
+- [2050075] Content server: Fix a periodic spurious error message when reading books in offline mode
+
+- Fix a regression in 7.0 caused by a regression in Qt that would result in calibre hanging rarely when using the cover browser view
+
+- [2049992] Fix custom template functions not useable in save to disk templates
+
+- Fix a regression in 7.2 that caused the popup used for editing fields in the book list to be mis-positioned on very wide monitors
+
+- [2052766] Version 7.5.1 fixes a bug in 7.5.0 where calibre would not start up using dark colors when the system was in dark mode on some windows installs and another bug that could cause errors when using cover grid mode with covers stored in CMYK colorspace
+
+:: improved recipes
+- El Diplo
+- Science News
+- Barrons
+- Financial Times
+- Business Today
+- Le Monde
+- Scientific American
+
+:: new recipes
+- ugeskriftet by morusn
+- Martin Fowler and Gitbug Blogs by Lucas Lois
+}}}
+
 {{{ 7.4.0 2024-01-19
 
 :: new features
