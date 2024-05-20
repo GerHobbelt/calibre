@@ -11,7 +11,7 @@ import threading
 from contextlib import contextmanager, suppress
 from functools import lru_cache
 from qt.core import (
-    QApplication, QBuffer, QByteArray, QColor, QDesktopServices, QDialog,
+    QApplication, QBuffer, QByteArray, QColor, QDateTime, QDesktopServices, QDialog,
     QDialogButtonBox, QEvent, QFile, QFileDialog, QFileIconProvider, QFileInfo, QFont,
     QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QImageReader,
     QImageWriter, QIODevice, QLocale, QNetworkProxyFactory, QObject, QPalette,
@@ -37,7 +37,7 @@ from calibre.gui2.qt_file_dialogs import FileDialog
 from calibre.ptempfile import base_dir
 from calibre.utils.config import Config, ConfigProxy, JSONConfig, dynamic
 from calibre.utils.config_base import tweaks
-from calibre.utils.date import UNDEFINED_DATE, qt_from_dt
+from calibre.utils.date import UNDEFINED_DATE
 from calibre.utils.file_type_icons import EXT_MAP
 from calibre.utils.img import set_image_allocation_limit
 from calibre.utils.localization import get_lang
@@ -446,7 +446,8 @@ create_defs()
 del create_defs
 # }}}
 
-UNDEFINED_QDATETIME = qt_from_dt(UNDEFINED_DATE, as_utc=True)
+UNDEFINED_QDATETIME = QDateTime(
+    UNDEFINED_DATE.year, UNDEFINED_DATE.month, UNDEFINED_DATE.day, UNDEFINED_DATE.hour, UNDEFINED_DATE.minute, UNDEFINED_DATE.second)
 QT_HIDDEN_CLEAR_ACTION = '_q_qlineeditclearaction'
 ALL_COLUMNS = ['title', 'ondevice', 'authors', 'size', 'timestamp', 'rating', 'publisher',
         'tags', 'series', 'pubdate']
@@ -1450,18 +1451,37 @@ def open_url(qurl):
                     import shlex
                     opener = shlex.split(spec)
                     break
+
+    def run_cmd(cmd):
+        import subprocess
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     with sanitize_env_vars():
         if opener:
-            import subprocess
             cmd = [x.replace('%u', qurl.toString()) for x in opener]
             if DEBUG:
                 print('Running opener:', cmd)
-            subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run_cmd(cmd)
         else:
             # Qt 5 requires QApplication to be constructed before trying to use
             # QDesktopServices::openUrl()
             ensure_app()
-            QDesktopServices.openUrl(qurl)
+            cmd = ['xdg-open', qurl.toLocalFile() if qurl.isLocalFile() else qurl.toString(QUrl.ComponentFormattingOption.FullyEncoded)]
+            if isfrozen and QApplication.instance().platformName() == "wayland":
+                # See https://bugreports.qt.io/browse/QTBUG-119438
+                run_cmd(cmd)
+                ok = True
+            else:
+                ok = QDesktopServices.openUrl(qurl)
+            if not ok:
+                # this happens a lot with Qt 6.5.3. On Wayland, Qt requires
+                # BOTH a QApplication AND a top level window so it can use the
+                # xdg activation token system Wayland imposes.
+                print('QDesktopServices::openUrl() failed for url:', qurl, file=sys.stderr)
+                if islinux:
+                    if DEBUG:
+                        print('Opening with xdg-open:', cmd)
+                    run_cmd(cmd)
 
 
 def safe_open_url(qurl):
@@ -1647,3 +1667,12 @@ def make_view_use_window_background(view):
     p.setColor(QPalette.ColorRole.AlternateBase, p.color(QPalette.ColorRole.Window))
     view.setPalette(p)
     return view
+
+
+def timed_print(*a, **kw):
+    if not DEBUG:
+        return
+    from time import monotonic
+    if not hasattr(timed_print, 'startup_time'):
+        timed_print.startup_time = monotonic()
+    print(f'[{monotonic() - timed_print.startup_time:.2f}]', *a, **kw)
