@@ -61,9 +61,11 @@ class BuildTest(unittest.TestCase):
         ldr = importlib.import_module('calibre').__spec__.loader.get_resource_reader()
         self.assertIn('ebooks', ldr.contents())
         try:
-            raw = ldr.open_resource('__init__.py').read()
+            with ldr.open_resource('__init__.py') as f:
+                raw = f.read()
         except FileNotFoundError:
-            raw = ldr.open_resource('__init__.pyc').read()
+            with ldr.open_resource('__init__.pyc') as f:
+                raw = f.read()
         self.assertGreater(len(raw), 1024)
 
     def test_regex(self):
@@ -417,10 +419,10 @@ class BuildTest(unittest.TestCase):
         --- ZLIB (PNG/ZIP) support ok
         '''.splitlines():
             self.assertIn(line.strip(), out)
-        i = Image.open(I('lt.png', allow_user_override=False))
-        self.assertGreaterEqual(i.size, (20, 20))
-        i = Image.open(P('catalog/DefaultCover.jpg', allow_user_override=False))
-        self.assertGreaterEqual(i.size, (20, 20))
+        with Image.open(I('lt.png', allow_user_override=False)) as i:
+            self.assertGreaterEqual(i.size, (20, 20))
+        with Image.open(P('catalog/DefaultCover.jpg', allow_user_override=False)) as i:
+            self.assertGreaterEqual(i.size, (20, 20))
 
     @unittest.skipUnless(iswindows and not is_ci, 'File dialog helper only used on windows (non-continuous-integration)')
     def test_file_dialog_helper(self):

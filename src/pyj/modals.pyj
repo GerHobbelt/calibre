@@ -38,12 +38,13 @@ class Modal:
         modal_count += 1
         self.id = modal_count
 
+
 class ModalContainer:
 
     def __init__(self):
         div = E.div(id='modal-container', tabindex='0',
             E.div(  # popup
-                E.div(),  # content area
+                E.div(class_='modal_height_container'),  # content area
                 E.a(svgicon('close'), title=_('Close'), onclick=self.close_current_modal.bind(self))
             )
         )
@@ -54,7 +55,7 @@ class ModalContainer:
         set_css(div,
             position='fixed', top='0', right='0', bottom='0', left='0', # Stretch over entire window
             background_color='rgba(0,0,0,0.8)', z_index=MODAL_Z_INDEX + '',
-            display='none', text_align='center', user_select='none'
+            display='none', user_select='none'
         )
 
         # Popup style
@@ -189,13 +190,13 @@ def create_simple_dialog(title, msg, details, icon, prefix, on_close=None, icon_
 def create_custom_dialog(title, content_generator_func, on_close=None, onkeydown=None):
     def create_func(parent, close_modal):
         content_div = E.div()
-        content_generator_func(content_div, close_modal)
         parent.appendChild(
             E.div(
                 style='max-width:60em; text-align: left',
                 E.h2(title, style='font-weight: bold; font-size: ' + get_font_size('title')),
                 E.div(content_div, style='padding-top: 1em; margin-top: 1em; border-top: 1px solid currentColor'),
         ))
+        content_generator_func(content_div, close_modal)
     show_modal(create_func, on_close=on_close, onkeydown=onkeydown)
 
 

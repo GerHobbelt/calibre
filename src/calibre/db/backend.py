@@ -975,6 +975,9 @@ class DB:
     def notes_data_for(self, field_name, item_id):
         return self.notes.get_note_data(self.conn, field_name, item_id)
 
+    def get_all_items_that_have_notes(self, field_name):
+        return self.notes.get_all_items_that_have_notes(self.conn, field_name)
+
     def set_notes_for(self, field, item_id, doc: str, searchable_text: str, resource_hashes, remove_unused_resources) -> int:
         id_val = self.tables[field].id_map[item_id]
         note_id = self.notes.set_note(self.conn, field, item_id, id_val, doc, resource_hashes, searchable_text)
@@ -986,8 +989,8 @@ class DB:
         id_val = self.tables[field].id_map[item_id]
         return self.notes.unretire(self.conn, field, item_id, id_val)
 
-    def add_notes_resource(self, path_or_stream, name) -> int:
-        return self.notes.add_resource(self.conn, path_or_stream, name)
+    def add_notes_resource(self, path_or_stream, name, mtime=None) -> int:
+        return self.notes.add_resource(self.conn, path_or_stream, name, mtime=mtime)
 
     def get_notes_resource(self, resource_hash) -> Optional[dict]:
         return self.notes.get_resource_data(self.conn, resource_hash)
@@ -1001,11 +1004,12 @@ class DB:
     def unretire_note(self, field, item_id, item_val):
         return self.notes.unretire(self.conn, field, item_id, item_val)
 
-    def notes_search(self,
-        fts_engine_query, use_stemming, highlight_start, highlight_end, snippet_size, restrict_to_fields, return_text, process_each_result
+    def search_notes(self,
+        fts_engine_query, use_stemming, highlight_start, highlight_end, snippet_size, restrict_to_fields, return_text, process_each_result, limit
     ):
         yield from self.notes.search(
-            self.conn, fts_engine_query, use_stemming, highlight_start, highlight_end, snippet_size, restrict_to_fields, return_text, process_each_result)
+            self.conn, fts_engine_query, use_stemming, highlight_start, highlight_end, snippet_size, restrict_to_fields, return_text,
+            process_each_result, limit)
 
     def export_notes_data(self, outfile):
         import zipfile
@@ -1566,25 +1570,27 @@ class DB:
             return fmt_path
         if not fmt:
             return
-        candidates = ()
-        with suppress(OSError):
-            candidates = os.scandir(path)
         q = fmt.lower()
-        for x in candidates:
-            if x.name.endswith(q) and x.is_file():
-                if not do_file_rename:
-                    return x.path
-                x = x.path
-                with suppress(OSError):
-                    atomic_rename(x, fmt_path)
+        try:
+            candidates = os.scandir(path)
+        except OSError:
+            return
+        with candidates:
+            for x in candidates:
+                if x.name.endswith(q) and x.is_file():
+                    if not do_file_rename:
+                        return x.path
+                    x = x.path
+                    with suppress(OSError):
+                        atomic_rename(x, fmt_path)
+                        return fmt_path
+                    try:
+                        shutil.move(x, fmt_path)
+                    except (shutil.SameFileError, OSError):
+                        # some other process synced in the file since the last
+                        # os.path.exists()
+                        return x
                     return fmt_path
-                try:
-                    shutil.move(x, fmt_path)
-                except (shutil.SameFileError, OSError):
-                    # some other process synced in the file since the last
-                    # os.path.exists()
-                    return x
-                return fmt_path
 
     def cover_abspath(self, book_id, path):
         path = os.path.join(self.library_path, path)

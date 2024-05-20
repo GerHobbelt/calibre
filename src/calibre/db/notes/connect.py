@@ -9,6 +9,7 @@ import time
 import xxhash
 from contextlib import suppress
 from itertools import count, repeat
+from collections import defaultdict
 from typing import Optional
 
 from calibre import sanitize_file_name
@@ -95,6 +96,7 @@ class Notes:
                 f"  DELETE FROM notes WHERE colname = '{table.name}' AND item = OLD.id;\n"
                 'END;'
             )
+        self.allowed_fields = frozenset(self.allowed_fields)
         SchemaUpgrade(conn, '\n'.join(triggers))
 
     def delete_field(self, conn, field_name):
@@ -269,6 +271,14 @@ class Notes:
                 'resource_hashes': frozenset(self.resources_used_by(conn, note_id)),
             }
 
+    def get_all_items_that_have_notes(self, conn, field_name=None):
+        if field_name:
+            return {item_id for (item_id,) in conn.execute('SELECT item FROM notes_db.notes WHERE colname=?', (field_name,))}
+        ans = defaultdict(set)
+        for (note_id, field_name) in conn.execute('SELECT item, colname FROM notes_db.notes'):
+            ans[field_name].add(note_id)
+        return ans
+
     def rename_note(self, conn, field_name, old_item_id, new_item_id, new_item_value):
         note_id = self.note_id_for(conn, field_name, old_item_id)
         if note_id is None:
@@ -296,7 +306,7 @@ class Notes:
             for path in items[:extra]:
                 remove_with_retry(path, is_dir=True)
 
-    def add_resource(self, conn, path_or_stream_or_data, name, update_name=True):
+    def add_resource(self, conn, path_or_stream_or_data, name, update_name=True, mtime=None):
         if isinstance(path_or_stream_or_data, bytes):
             data = path_or_stream_or_data
         elif isinstance(path_or_stream_or_data, str):
@@ -322,6 +332,9 @@ class Notes:
                 f = open(path, 'wb')
             with f:
                 f.write(data)
+            if mtime is not None:
+                os.utime(f.name, (mtime, mtime))
+
         name = sanitize_file_name(name)
         base_name, ext = os.path.splitext(name)
         c = 0
@@ -355,12 +368,40 @@ class Notes:
             path = make_long_path_useable(path)
             os.listdir(os.path.dirname(path))
             with suppress(FileNotFoundError), open(path, 'rb') as f:
-                return {'name': name, 'data': f.read(), 'hash': resource_hash}
+                mtime = os.stat(f.fileno()).st_mtime
+                return {'name': name, 'data': f.read(), 'hash': resource_hash, 'mtime': mtime}
+
+    def all_notes(self, conn, restrict_to_fields=(), limit=None, snippet_size=64, return_text=True, process_each_result=None) -> list[dict]:
+        if snippet_size is None:
+            snippet_size = 64
+        char_size = snippet_size * 8
+        query = 'SELECT {0}.id, {0}.colname, {0}.item, substr({0}.searchable_text, 0, {1}) FROM {0} '.format('notes', char_size)
+        if restrict_to_fields:
+            query += ' WHERE notes_db.notes.colname IN ({})'.format(','.join(repeat('?', len(restrict_to_fields))))
+        query += ' ORDER BY mtime DESC'
+        if limit is not None:
+            query += f' LIMIT {limit}'
+        for record in conn.execute(query, tuple(restrict_to_fields)):
+            result = {
+                'id': record[0],
+                'field': record[1],
+                'item_id': record[2],
+                'text': record[3] if return_text else '',
+            }
+            if process_each_result is not None:
+                result = process_each_result(result)
+            ret = yield result
+            if ret is True:
+                break
 
     def search(self,
         conn, fts_engine_query, use_stemming, highlight_start, highlight_end, snippet_size, restrict_to_fields=(),
-        return_text=True, process_each_result=None
+        return_text=True, process_each_result=None, limit=None
     ):
+        if not fts_engine_query:
+            yield from self.all_notes(
+                conn, restrict_to_fields, limit=limit, snippet_size=snippet_size, return_text=return_text, process_each_result=process_each_result)
+            return
         fts_engine_query = unicode_normalize(fts_engine_query)
         fts_table = 'notes_fts' + ('_stemmed' if use_stemming else '')
         if return_text:
@@ -380,6 +421,8 @@ class Notes:
             query += ' notes_db.notes.colname IN ({}) AND '.format(','.join(repeat('?', len(restrict_to_fields))))
         query += f' "{fts_table}" MATCH ?'
         query += f' ORDER BY {fts_table}.rank '
+        if limit is not None:
+            query += f' LIMIT {limit}'
         try:
             for record in conn.execute(query, restrict_to_fields+(fts_engine_query,)):
                 result = {

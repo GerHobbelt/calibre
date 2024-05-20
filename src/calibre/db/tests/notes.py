@@ -117,6 +117,7 @@ def test_cache_api(self: 'NotesTest'):
     h1 = cache.add_notes_resource(b'resource1t', 'r1.jpg')
     h2 = cache.add_notes_resource(b'resource2t', 'r1.jpg')
     cache.set_notes_for('#tags', tag_id, doc, resource_hashes=(h1, h2))
+    self.ae(cache.get_all_items_that_have_notes(), {'#tags': {tag_id}, 'authors': {author_id}})
     self.ae(cache.notes_for('#tags', tag_id), doc)
     cache.delete_custom_column('tags')
     cache.close()
@@ -150,6 +151,10 @@ def test_cache_api(self: 'NotesTest'):
         self.assertGreater(note_id, 0)
         self.assertIn('<p>test simple exim <img', cache.notes_for('authors', author_id))
         res2 = tuple(cache.get_notes_resource(x) for x in cache.notes_resources_used_by('authors', author_id))
+        for x in res:
+            del x['mtime']
+        for x in res2:
+            del x['mtime']
         self.ae(sorted(res, key=itemgetter('name')), sorted(res2, key=itemgetter('name')))
 
 
@@ -164,12 +169,14 @@ def test_fts(self: 'NotesTest'):
 
     def ids_for_search(x, restrict_to_fields=()):
         return {
-            (x['field'], x['item_id']) for x in cache.notes_search(x, restrict_to_fields=restrict_to_fields)
+            (x['field'], x['item_id']) for x in cache.search_notes(x, restrict_to_fields=restrict_to_fields)
         }
 
     self.ae(ids_for_search('wunderbar'), {('authors', authors[0])})
     self.ae(ids_for_search('common'), {('authors', authors[0]), ('authors', authors[1]), ('tags', tags[0]), ('tags', tags[1])})
     self.ae(ids_for_search('common', ('tags',)), {('tags', tags[0]), ('tags', tags[1])})
+    self.ae(ids_for_search(''), ids_for_search('common'))
+    self.ae(ids_for_search('', ('tags',)), ids_for_search('common', ('tags',)))
 
     # test that searching by item value works
     an = cache.get_item_name('authors', authors[0])
