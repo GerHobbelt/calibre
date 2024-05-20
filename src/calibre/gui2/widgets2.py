@@ -9,8 +9,8 @@ from qt.core import (
     QFontInfo, QFontMetrics, QFrame, QIcon, QKeySequence, QLabel, QLayout, QMenu,
     QMimeData, QPainter, QPalette, QPixmap, QPoint, QPushButton, QRect, QScrollArea,
     QSize, QSizePolicy, QStyle, QStyledItemDelegate, QStyleOptionToolButton,
-    QStylePainter, Qt, QTabWidget, QTextBrowser, QTextCursor, QTimer, QToolButton,
-    QUndoCommand, QUndoStack, QUrl, QWidget, pyqtSignal,
+    QStylePainter, Qt, QTabWidget, QTextBrowser, QTextCursor, QTextDocument, QTimer,
+    QToolButton, QUndoCommand, QUndoStack, QUrl, QWidget, pyqtSignal,
 )
 
 from calibre import prepare_string_for_xml
@@ -518,6 +518,7 @@ class Separator(QWidget):  # {{{
 class HTMLDisplay(QTextBrowser):
 
     anchor_clicked = pyqtSignal(object)
+    notes_resource_scheme = ''  # set to scheme to use to load resources for notes from the current db
 
     def __init__(self, parent=None):
         QTextBrowser.__init__(self, parent)
@@ -589,6 +590,14 @@ class HTMLDisplay(QTextBrowser):
                 return QByteArray(data)
         elif qurl.scheme() == 'calibre-icon':
             return QIcon.icon_as_png(qurl.path().lstrip('/'), as_bytearray=True)
+        elif self.notes_resource_scheme and qurl.scheme() == self.notes_resource_scheme and int(rtype) == int(QTextDocument.ResourceType.ImageResource):
+            from calibre.gui2.ui import get_gui
+            gui = get_gui()
+            if gui is not None:
+                db = gui.current_db.new_api
+                resource = db.get_notes_resource(f'{qurl.host()}:{qurl.path()[1:]}')
+                if resource is not None:
+                    return QByteArray(resource['data'])
         else:
             return QTextBrowser.loadResource(self, rtype, qurl)
 
