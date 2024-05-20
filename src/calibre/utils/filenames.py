@@ -11,9 +11,7 @@ from contextlib import closing, suppress
 from math import ceil
 
 from calibre import force_unicode, isbytestring, prints, sanitize_file_name
-from calibre.constants import (
-    filesystem_encoding, ismacos, iswindows, preferred_encoding,
-)
+from calibre.constants import filesystem_encoding, ismacos, iswindows, preferred_encoding
 from calibre.utils.localization import _, get_udc
 from polyglot.builtins import iteritems, itervalues
 
@@ -538,21 +536,26 @@ def remove_dir_if_empty(path, ignore_metadata_caches=False):
     try:
         os.rmdir(path)
     except OSError as e:
-        if e.errno == errno.ENOTEMPTY or len(os.listdir(path)) > 0:
+        try:
+            entries = os.listdir(path)
+        except FileNotFoundError:  # something deleted path out from under us
+            return
+        if e.errno == errno.ENOTEMPTY or len(entries) > 0:
             # Some linux systems appear to raise an EPERM instead of an
             # ENOTEMPTY, see https://bugs.launchpad.net/bugs/1240797
             if ignore_metadata_caches:
                 try:
                     found = False
-                    for x in os.listdir(path):
+                    for x in entries:
                         if x.lower() in {'.ds_store', 'thumbs.db'}:
                             found = True
                             x = os.path.join(path, x)
-                            if os.path.isdir(x):
-                                import shutil
-                                shutil.rmtree(x)
-                            else:
-                                os.remove(x)
+                            with suppress(FileNotFoundError):
+                                if os.path.isdir(x):
+                                    import shutil
+                                    shutil.rmtree(x)
+                                else:
+                                    os.remove(x)
                 except Exception:  # We could get an error, if, for example, windows has locked Thumbs.db
                     found = False
                 if found:

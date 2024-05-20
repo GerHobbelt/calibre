@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import date
+
 from calibre.web.feeds.news import BasicNewsRecipe, classes
 
 is_saturday = date.today().weekday() == 5
@@ -88,7 +89,6 @@ class LiveMint(BasicNewsRecipe):
                 font-weight:normal !important; font-style:italic; color:#202020;
             }
             h2 {font-size:normal !important;}
-            .author-widget {font-size:small; font-style:italic; color:#404040;}
             em, blockquote {color:#202020;}
             .moreAbout, .articleInfo, .metaData, .psTopicsHeading, .topicsTag {font-size:small;}
         '''
@@ -101,7 +101,7 @@ class LiveMint(BasicNewsRecipe):
             dict(name=['meta', 'link', 'svg', 'button', 'iframe']),
             classes(
                 'trendingSimilarHeight moreNews mobAppDownload label msgError msgOk taboolaHeight gadgetSlider'
-                ' socialHolder imgbig disclamerText disqus-comment-count openinApp2 lastAdSlot bs_logo'
+                ' socialHolder imgbig disclamerText disqus-comment-count openinApp2 lastAdSlot bs_logo author-widget'
                 ' datePublish sepStory premiumSlider moreStory Joinus moreAbout milestone benefitText'
             )
         ]
