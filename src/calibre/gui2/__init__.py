@@ -426,6 +426,7 @@ def create_defs():
     defs['cover_grid_disk_cache_size'] = 2500
     defs['cover_grid_show_title'] = False
     defs['cover_grid_texture'] = None
+    defs['cover_grid_corner_radius'] = 0
     defs['show_vl_tabs'] = False
     defs['vl_tabs_closable'] = True
     defs['show_highlight_toggle_button'] = False
@@ -1189,10 +1190,9 @@ class Application(QApplication):
             args = [override_program_name] + args[1:]
         self.palette_manager = PaletteManager(force_calibre_style, headless)
         if headless:
-            args.extend(('-platformpluginpath', plugins_loc, '-platform', 'headless'))
+            args.extend(('-platformpluginpath', plugins_loc, '-platform', os.environ.get('CALIBRE_HEADLESS_PLATFORM', 'headless')))
         else:
             args.extend(self.palette_manager.args_to_qt)
-
         self.headless = headless
         from calibre_extensions import progress_indicator
         self.pi = progress_indicator
@@ -1583,7 +1583,7 @@ def ensure_app(headless=True):
             args = sys.argv[:1]
             has_headless = ismacos or islinux or isbsd
             if headless and has_headless:
-                args += ['-platformpluginpath', plugins_loc, '-platform', 'headless']
+                args += ['-platformpluginpath', plugins_loc, '-platform', os.environ.get('CALIBRE_HEADLESS_PLATFORM', 'headless')]
                 if ismacos:
                     os.environ['QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM'] = '1'
             if headless and iswindows:

@@ -23,6 +23,67 @@
 # - title by author
 # }}}
 
+{{{ 7.10.0 2024-05-03
+
+:: new features
+
+- Export of calibre data: Ensure individual part files in the exported data are no larger than one gigabyte even
+  if the library contains individual files larger than that size.
+
+  Note that this means that exports created by calibre from this version
+  on will not be importable by earlier versions. However, exports from
+  earlier versions should still be importable.
+
+- Edit book: Spell check: Add options to exclude words in ALL CAPS or with numbers or in camelCase/snake_case from the list of words
+
+- Allow easily inverting the current search via the right click menu on the search box
+
+:: bug fixes
+
+- [2064546] Kobo driver: Fix database unsupported error with newest firmware
+
+- [2063301] DOCX Input: Fix text elements containing only whitespace being incorrectly ignored
+
+- Bulk metadata dialog: Do not fail when setting covers from ebook files and some of the files have invalid covers
+
+:: improved recipes
+- Economist
+- The Week
+- Caravan Magazine
+- Financial Times
+
+}}}
+
+{{{ 7.9.0 2024-04-19
+
+:: new features
+
+- [2060886] Kobo driver: Add support for the new color Kobo devices
+
+- Edit book: Add a setting to control cursor width under Preferences->Editor settings
+
+- Edit book: Regex-function mode: Show a confirmation popup when closing the function editor when there are unsaved changes
+
+:: bug fixes
+
+- [2060314] Fix undocked Quickview dialog not being restored at startup
+
+- [2044118] Windows: Fix an issue where closing a maximized calibre window to the system tray and then reconnecting with remote desktop would cause a blank calibre window to be displayed
+
+:: improved recipes
+- El Correo
+- Eenadu
+- ORFonline
+- NatGeo
+- Harpers Magazine
+- New Yorker
+- Business Today
+- The Week
+- Asahi Shimbun
+- Outlook Magazine
+
+}}}
+
 {{{ 7.8.0 2024-04-05
 
 :: new features
