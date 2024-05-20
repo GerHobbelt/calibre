@@ -671,7 +671,7 @@ class Parser(SearchQueryParser):  # {{{
             matches = set()
             error_string = '*@*TEMPLATE_ERROR*@*'
             template_cache = {}
-            global_vars = {}
+            global_vars = {'_candidates': candidates}
             for book_id in candidates:
                 mi = self.dbcache.get_proxy_metadata(book_id)
                 val = mi.formatter.safe_format(template, {}, error_string, mi,
@@ -958,7 +958,7 @@ class Search:
     def query_is_cacheable(self, sqp, dbcache, query):
         if query:
             for name, value in sqp.get_queried_fields(query):
-                if name == 'template' and '#@#:d:' in value:
+                if name == 'template':
                     return False
                 elif name in dbcache.field_metadata.all_field_keys():
                     fm = dbcache.field_metadata[name]
